@@ -1,18 +1,32 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from './interfaces/user.interface';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private usersService: UsersService,
+  ) {}
+
+  async register(email: string, password: string) {
+    const existingUser = await this.usersService.findByEmail(email);
+    if (existingUser) {
+      throw new ConflictException('Email already exists');
+    }
+
+    const user = await this.usersService.create(email, password);
+    return this.login(user);
+  }
 
   async validateUser(
     email: string,
     password: string,
   ): Promise<Omit<User, 'password'> | null> {
-    const user = await this.findUser(email);
+    const user = await this.usersService.findByEmail(email);
     if (!user || !user.password) {
       return null;
     }
@@ -24,22 +38,10 @@ export class AuthService {
     return result;
   }
 
-  login(user: Omit<User, 'password'>): { access_token: string } {
-    const payload = { email: user.email, sub: user.userId };
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async login(user: Omit<User, 'password'>): Promise<{ access_token: string }> {
+    const payload = { email: user.email, sub: user.id };
     const access_token = this.jwtService.sign(payload);
     return { access_token };
-  }
-
-  private async findUser(email: string): Promise<User | null> {
-    // TODO: Implement your user lookup logic here
-    // This is just a placeholder implementation
-    if (email === 'test@example.com') {
-      return {
-        userId: 1,
-        email: 'test@example.com',
-        password: await bcrypt.hash('test123', 10),
-      };
-    }
-    return null;
   }
 }
